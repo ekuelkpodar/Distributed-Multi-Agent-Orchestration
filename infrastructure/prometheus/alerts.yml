@@ -1,0 +1,206 @@
+# Prometheus alert rules for Multi-Agent Orchestration Platform
+
+groups:
+  - name: agent-orchestration-alerts
+    rules:
+      # Agent health alerts
+      - alert: AgentDown
+        expr: agent_active{status="offline"} > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent is offline"
+          description: "Agent {{ $labels.agent_id }} of type {{ $labels.agent_type }} has been offline for more than 2 minutes."
+
+      - alert: NoActiveAgents
+        expr: sum(agent_active{status="idle"}) == 0 and sum(agent_active{status="busy"}) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No active agents available"
+          description: "There are no active agents in the system for more than 5 minutes."
+
+      - alert: AgentHeartbeatMissing
+        expr: time() - agent_last_heartbeat_timestamp > 60
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent heartbeat missing"
+          description: "Agent {{ $labels.agent_id }} has not sent a heartbeat in the last 60 seconds."
+
+      # Task alerts
+      - alert: HighTaskFailureRate
+        expr: rate(task_failed_total[5m]) / rate(task_completed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High task failure rate"
+          description: "Task failure rate is above 10% for the last 5 minutes."
+
+      - alert: TaskQueueBacklog
+        expr: task_queue_size > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task queue backlog"
+          description: "Task queue {{ $labels.queue_name }} has more than 100 pending tasks."
+
+      - alert: SlowTaskExecution
+        expr: histogram_quantile(0.95, rate(task_duration_seconds_bucket[5m])) > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow task execution"
+          description: "95th percentile of task duration is above 60 seconds."
+
+      - alert: TaskStuck
+        expr: task_in_progress_duration_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task appears to be stuck"
+          description: "Task {{ $labels.task_id }} has been in progress for more than 5 minutes."
+
+      # API alerts
+      - alert: HighAPIErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is above 5% for the last 5 minutes."
+
+      - alert: SlowAPIResponses
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow API responses"
+          description: "95th percentile of API response time is above 2 seconds."
+
+      # Message broker alerts
+      - alert: KafkaConsumerLag
+        expr: kafka_consumer_lag > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag high"
+          description: "Kafka consumer group {{ $labels.group }} has a lag of {{ $value }} messages."
+
+      - alert: MessageProcessingFailures
+        expr: rate(message_failed_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Message processing failures"
+          description: "Messages are failing to process on topic {{ $labels.topic }}."
+
+      # LLM alerts
+      - alert: LLMHighErrorRate
+        expr: rate(llm_errors_total[5m]) / rate(llm_requests_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High LLM error rate"
+          description: "LLM API error rate is above 10%."
+
+      - alert: LLMSlowResponses
+        expr: histogram_quantile(0.95, rate(llm_request_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow LLM responses"
+          description: "95th percentile of LLM response time is above 30 seconds."
+
+      # Database alerts
+      - alert: DatabaseConnectionPoolExhausted
+        expr: db_connection_pool_used / db_connection_pool_size > 0.9
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Database connection pool is {{ $value | humanizePercentage }} utilized."
+
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow database queries"
+          description: "95th percentile of database query time is above 1 second."
+
+      # Redis alerts
+      - alert: RedisConnectionPoolExhausted
+        expr: redis_connection_pool_used / redis_connection_pool_size > 0.9
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis connection pool nearly exhausted"
+          description: "Redis connection pool is {{ $value | humanizePercentage }} utilized."
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is above 90%."
+
+  - name: infrastructure-alerts
+    rules:
+      # Service availability
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service is down"
+          description: "{{ $labels.job }} service is down."
+
+      # Memory usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 90%."
+
+      # CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 90% for 10 minutes."
+
+      # Disk space
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is below 10% on {{ $labels.device }}."

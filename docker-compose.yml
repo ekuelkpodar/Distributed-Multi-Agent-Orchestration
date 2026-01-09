@@ -1,0 +1,278 @@
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: agents-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agent_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agent_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-agents_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agent_user} -d ${POSTGRES_DB:-agents_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Redis with vector search capabilities
+  redis:
+    image: redis/redis-stack:7.4.0-v1
+    container_name: agents-redis
+    ports:
+      - "6379:6379"
+      - "8001:8001"  # RedisInsight UI
+    volumes:
+      - redis_data:/data
+      - ./infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Zookeeper for Kafka coordination
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: agents-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Kafka message broker
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: agents-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 10485760
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Kafka topic initialization
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: agents-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      echo 'Waiting for Kafka to be ready...'
+      sleep 10
+
+      echo 'Creating Kafka topics...'
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic agent.lifecycle
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 6 --replication-factor 1 --topic agent.tasks
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic agent.communication
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 --topic agent.state
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1 --topic system.events
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1 --topic dead.letter
+
+      echo 'Topics created successfully:'
+      kafka-topics --list --bootstrap-server kafka:9092
+      "
+    networks:
+      - agent-network
+
+  # Orchestrator Service
+  orchestrator:
+    build:
+      context: .
+      dockerfile: services/orchestrator/Dockerfile
+    container_name: agents-orchestrator
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_pass}@postgres:5432/${POSTGRES_DB:-agents_db}
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      JAEGER_AGENT_HOST: jaeger
+      JAEGER_AGENT_PORT: 6831
+      SERVICE_NAME: orchestrator
+      SERVICE_VERSION: "1.0.0"
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+    volumes:
+      - ./services/orchestrator:/app
+      - ./shared:/app/shared
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Agent Worker Service (scalable)
+  agent-worker:
+    build:
+      context: .
+      dockerfile: services/agent-worker/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      orchestrator:
+        condition: service_healthy
+    deploy:
+      replicas: 3
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_pass}@postgres:5432/${POSTGRES_DB:-agents_db}
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ORCHESTRATOR_URL: http://orchestrator:8000
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      JAEGER_AGENT_HOST: jaeger
+      JAEGER_AGENT_PORT: 6831
+      SERVICE_NAME: agent-worker
+      SERVICE_VERSION: "1.0.0"
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+    volumes:
+      - ./services/agent-worker:/app
+      - ./shared:/app/shared
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: agents-jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"
+      - "14250:14250"
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ":9411"
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: agents-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Grafana for dashboards
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: agents-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+networks:
+  agent-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  postgres_data:
+  redis_data:
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:
+  prometheus_data:
+  grafana_data:

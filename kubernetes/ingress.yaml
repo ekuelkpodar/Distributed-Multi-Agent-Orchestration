@@ -1,0 +1,188 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-orchestration-ingress
+  namespace: agent-orchestration
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/websocket-services: "orchestrator"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - api.agent-orchestration.example.com
+      secretName: agent-orchestration-tls
+  rules:
+    - host: api.agent-orchestration.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: orchestrator
+                port:
+                  number: 8000
+          - path: /metrics
+            pathType: Exact
+            backend:
+              service:
+                name: orchestrator
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: orchestrator
+                port:
+                  number: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: agent-orchestration
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-orchestrator
+  namespace: agent-orchestration
+spec:
+  podSelector:
+    matchLabels:
+      app: orchestrator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+    - from:
+        - podSelector:
+            matchLabels:
+              app: agent-worker
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    - to:
+        - podSelector:
+            matchLabels:
+              app: jaeger
+      ports:
+        - protocol: UDP
+          port: 6831
+    - to: # Allow external API calls (Anthropic, OpenAI)
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-agent-worker
+  namespace: agent-orchestration
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-worker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: orchestrator
+      ports:
+        - protocol: TCP
+          port: 8001
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    - to:
+        - podSelector:
+            matchLabels:
+              app: orchestrator
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: jaeger
+      ports:
+        - protocol: UDP
+          port: 6831
+    - to: # Allow external API calls
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

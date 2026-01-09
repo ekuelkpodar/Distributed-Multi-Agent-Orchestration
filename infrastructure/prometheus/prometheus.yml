@@ -1,0 +1,74 @@
+# Prometheus configuration for Multi-Agent Orchestration Platform
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'agent-orchestration'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - alertmanager:9093
+
+# Rule files
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+    scheme: http
+
+  # Orchestrator service
+  - job_name: 'orchestrator'
+    static_configs:
+      - targets: ['orchestrator:8000']
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 10s
+
+  # Agent worker services
+  - job_name: 'agent-workers'
+    dns_sd_configs:
+      - names:
+          - 'tasks.agent-worker'
+        type: 'A'
+        port: 8001
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 10s
+
+  # Redis metrics (using redis_exporter if available)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    metrics_path: /metrics
+    scheme: http
+
+  # Kafka metrics (using JMX exporter if configured)
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9092']
+    metrics_path: /metrics
+    scheme: http
+
+  # PostgreSQL metrics (using postgres_exporter if available)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    metrics_path: /metrics
+    scheme: http
+
+  # Jaeger metrics
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+    metrics_path: /metrics
+    scheme: http

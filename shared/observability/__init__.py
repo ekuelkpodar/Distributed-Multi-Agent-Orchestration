@@ -1,0 +1,101 @@
+"""Observability package for tracing, metrics, and logging."""
+
+from shared.observability.tracing import (
+    TracingConfig,
+    TracingManager,
+    create_span,
+    init_tracing,
+    get_tracing_manager,
+    shutdown_tracing,
+)
+from shared.observability.metrics import (
+    MetricsManager,
+    track_time,
+    Timer,
+    init_metrics,
+    get_metrics_manager,
+    # Agent metrics
+    AGENT_SPAWNED_TOTAL,
+    AGENT_ACTIVE,
+    AGENT_HEARTBEAT_LATENCY,
+    AGENT_MEMORY_USAGE,
+    AGENT_UPTIME,
+    # Task metrics
+    TASK_SUBMITTED_TOTAL,
+    TASK_COMPLETED_TOTAL,
+    TASK_FAILED_TOTAL,
+    TASK_DURATION,
+    TASK_QUEUE_SIZE,
+    TASK_RETRY_TOTAL,
+    # Message metrics
+    MESSAGE_SENT_TOTAL,
+    MESSAGE_RECEIVED_TOTAL,
+    MESSAGE_PROCESSING_TIME,
+    MESSAGE_FAILED_TOTAL,
+    # API metrics
+    HTTP_REQUESTS_TOTAL,
+    HTTP_REQUEST_DURATION,
+    HTTP_REQUEST_SIZE,
+    HTTP_RESPONSE_SIZE,
+    # LLM metrics
+    LLM_REQUESTS_TOTAL,
+    LLM_REQUEST_DURATION,
+    LLM_TOKENS_TOTAL,
+    LLM_ERRORS_TOTAL,
+)
+from shared.observability.logging import (
+    configure_logging,
+    get_logger,
+    LoggerAdapter,
+    bind_context,
+    unbind_context,
+    clear_context,
+    LogContext,
+)
+
+__all__ = [
+    # Tracing
+    "TracingConfig",
+    "TracingManager",
+    "create_span",
+    "init_tracing",
+    "get_tracing_manager",
+    "shutdown_tracing",
+    # Metrics
+    "MetricsManager",
+    "track_time",
+    "Timer",
+    "init_metrics",
+    "get_metrics_manager",
+    "AGENT_SPAWNED_TOTAL",
+    "AGENT_ACTIVE",
+    "AGENT_HEARTBEAT_LATENCY",
+    "AGENT_MEMORY_USAGE",
+    "AGENT_UPTIME",
+    "TASK_SUBMITTED_TOTAL",
+    "TASK_COMPLETED_TOTAL",
+    "TASK_FAILED_TOTAL",
+    "TASK_DURATION",
+    "TASK_QUEUE_SIZE",
+    "TASK_RETRY_TOTAL",
+    "MESSAGE_SENT_TOTAL",
+    "MESSAGE_RECEIVED_TOTAL",
+    "MESSAGE_PROCESSING_TIME",
+    "MESSAGE_FAILED_TOTAL",
+    "HTTP_REQUESTS_TOTAL",
+    "HTTP_REQUEST_DURATION",
+    "HTTP_REQUEST_SIZE",
+    "HTTP_RESPONSE_SIZE",
+    "LLM_REQUESTS_TOTAL",
+    "LLM_REQUEST_DURATION",
+    "LLM_TOKENS_TOTAL",
+    "LLM_ERRORS_TOTAL",
+    # Logging
+    "configure_logging",
+    "get_logger",
+    "LoggerAdapter",
+    "bind_context",
+    "unbind_context",
+    "clear_context",
+    "LogContext",
+]

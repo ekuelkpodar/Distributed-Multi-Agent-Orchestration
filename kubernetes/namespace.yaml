@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-orchestration
+  labels:
+    app.kubernetes.io/name: agent-orchestration
+    app.kubernetes.io/component: platform
