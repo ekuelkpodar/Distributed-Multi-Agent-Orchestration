@@ -95,7 +95,26 @@ class BaseAgent(ABC):
     def _get_llm(self):
         """Get or create the LLM instance."""
         if self._llm is None:
-            if "claude" in self.model.lower():
+            # Use OpenRouter if configured
+            if settings.use_openrouter and settings.openrouter_api_key:
+                logger.info(
+                    "Using OpenRouter for LLM",
+                    model=self.model,
+                    base_url=settings.openrouter_base_url,
+                )
+                self._llm = ChatOpenAI(
+                    model=self.model,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                    timeout=settings.llm_timeout,
+                    openai_api_key=settings.openrouter_api_key,
+                    openai_api_base=settings.openrouter_base_url,
+                    default_headers={
+                        "HTTP-Referer": "https://github.com/distributed-agent-platform",
+                        "X-Title": "Distributed Agent Platform",
+                    },
+                )
+            elif "claude" in self.model.lower():
                 self._llm = ChatAnthropic(
                     model=self.model,
                     temperature=self.temperature,

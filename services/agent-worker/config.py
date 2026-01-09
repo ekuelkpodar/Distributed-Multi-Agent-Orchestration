@@ -50,10 +50,13 @@ class Settings(BaseSettings):
     # LLM Configuration
     anthropic_api_key: Optional[str] = Field(default=None)
     openai_api_key: Optional[str] = Field(default=None)
-    default_model: str = Field(default="claude-sonnet-4-20250514")
+    openrouter_api_key: Optional[str] = Field(default=None)
+    openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1")
+    default_model: str = Field(default="anthropic/claude-3.5-sonnet")
     llm_timeout: int = Field(default=120)
     llm_max_tokens: int = Field(default=4096)
     llm_temperature: float = Field(default=0.7)
+    use_openrouter: bool = Field(default=True)
 
     # Memory Configuration
     memory_short_term_ttl: int = Field(default=3600)  # 1 hour

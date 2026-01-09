@@ -81,7 +81,7 @@ class EventProducer:
         client_id: str = "agent-orchestrator",
         acks: str = "all",
         retries: int = 3,
-        compression_type: str = "snappy",
+        compression_type: str = "gzip",
         enable_idempotence: bool = True,
     ):
         self.bootstrap_servers = bootstrap_servers or os.getenv(
