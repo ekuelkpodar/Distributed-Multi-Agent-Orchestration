@@ -49,6 +49,7 @@ health_router = APIRouter(prefix="/health", tags=["Health"])
 # Core managers (initialized on startup)
 agent_manager: Optional[AgentManager] = None
 task_scheduler: Optional[TaskScheduler] = None
+advanced_scheduler = None  # AdvancedScheduler instance
 
 
 def get_agent_manager() -> AgentManager:

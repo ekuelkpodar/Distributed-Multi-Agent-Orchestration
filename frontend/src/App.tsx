@@ -10,6 +10,9 @@ const AgentDetailsPage = lazy(() => import('./pages/Agents/AgentDetailsPage'));
 const TasksPage = lazy(() => import('./pages/Tasks/TasksPage'));
 const TaskDetailsPage = lazy(() => import('./pages/Tasks/TaskDetailsPage'));
 const MonitoringPage = lazy(() => import('./pages/Monitoring/MonitoringPage'));
+const AnalyticsPage = lazy(() => import('./pages/Analytics/AnalyticsPage'));
+const AuditLogPage = lazy(() => import('./pages/AuditLog/AuditLogPage'));
+const WebhooksPage = lazy(() => import('./pages/Webhooks/WebhooksPage'));
 const SettingsPage = lazy(() => import('./pages/Settings/SettingsPage'));
 
 function App() {
@@ -24,6 +27,9 @@ function App() {
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/tasks/:taskId" element={<TaskDetailsPage />} />
           <Route path="/monitoring" element={<MonitoringPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/audit" element={<AuditLogPage />} />
+          <Route path="/webhooks" element={<WebhooksPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

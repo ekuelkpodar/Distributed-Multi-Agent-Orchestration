@@ -15,8 +15,14 @@ import structlog
 
 from config import get_settings
 from api import routes
+from api import analytics_routes, audit_routes, webhook_routes
 from core.agent_manager import AgentManager
 from core.task_scheduler import TaskScheduler
+from services.metrics_service import MetricsService
+from services.insights_service import AIInsightsService
+from services.audit_service import AuditService
+from services.webhook_service import WebhookService
+from services.scheduler_service import AdvancedScheduler, SchedulerConfig, SchedulingStrategy
 from shared.database.connections import init_databases, close_databases
 from shared.events.producers import init_producer, close_producer
 from shared.observability.logging import configure_logging
@@ -84,12 +90,57 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     )
     await routes.task_scheduler.start()
 
+    # Initialize advanced services
+    # Metrics Service
+    analytics_routes.metrics_service = MetricsService(
+        retention_days=settings.metrics_retention_days
+    )
+    await analytics_routes.metrics_service.start()
+    logger.info("Metrics service initialized")
+
+    # AI Insights Service
+    analytics_routes.insights_service = AIInsightsService(
+        cache_ttl=settings.insights_cache_ttl
+    )
+    logger.info("AI Insights service initialized")
+
+    # Audit Service
+    audit_routes.audit_service = AuditService(
+        retention_days=settings.audit_retention_days
+    )
+    logger.info("Audit service initialized")
+
+    # Webhook Service
+    webhook_routes.webhook_service = WebhookService()
+    await webhook_routes.webhook_service.start(
+        worker_count=settings.webhook_worker_count
+    )
+    logger.info("Webhook service initialized")
+
+    # Advanced Scheduler
+    scheduler_config = SchedulerConfig(
+        strategy=SchedulingStrategy(settings.scheduler_strategy),
+        max_queue_size=settings.task_queue_max_size,
+        aging_factor=settings.scheduler_aging_factor,
+    )
+    routes.advanced_scheduler = AdvancedScheduler(scheduler_config)
+    await routes.advanced_scheduler.start()
+    logger.info("Advanced scheduler initialized")
+
     logger.info("Orchestrator service started successfully")
 
     yield
 
     # Shutdown
     logger.info("Shutting down orchestrator service")
+
+    # Stop advanced services
+    if hasattr(routes, 'advanced_scheduler') and routes.advanced_scheduler:
+        await routes.advanced_scheduler.stop()
+    if webhook_routes.webhook_service:
+        await webhook_routes.webhook_service.stop()
+    if analytics_routes.metrics_service:
+        await analytics_routes.metrics_service.stop()
 
     # Stop core managers
     if routes.agent_manager:
@@ -222,6 +273,9 @@ async def metrics():
 
 # Include API routes
 app.include_router(routes.router, prefix=settings.api_prefix)
+app.include_router(analytics_routes.router, prefix=settings.api_prefix)
+app.include_router(audit_routes.router, prefix=settings.api_prefix)
+app.include_router(webhook_routes.router, prefix=settings.api_prefix)
 
 # Root endpoint
 @app.get("/")

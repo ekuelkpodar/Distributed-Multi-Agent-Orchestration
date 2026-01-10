@@ -8,6 +8,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  BarChart3,
+  FileText,
+  Webhook,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -22,6 +25,9 @@ const navigation = [
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'Tasks', href: '/tasks', icon: ListTodo },
   { name: 'Monitoring', href: '/monitoring', icon: Activity },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Audit Log', href: '/audit', icon: FileText },
+  { name: 'Webhooks', href: '/webhooks', icon: Webhook },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

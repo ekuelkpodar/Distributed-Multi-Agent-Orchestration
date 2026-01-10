@@ -85,6 +85,22 @@ class Settings(BaseSettings):
     rate_limit_requests: int = Field(default=100)
     rate_limit_window: int = Field(default=60)
 
+    # Analytics Configuration
+    metrics_retention_days: int = Field(default=30)
+    insights_cache_ttl: int = Field(default=3600)
+
+    # Audit Configuration
+    audit_retention_days: int = Field(default=90)
+
+    # Webhook Configuration
+    webhook_worker_count: int = Field(default=3)
+    webhook_default_timeout: int = Field(default=30)
+    webhook_max_retries: int = Field(default=3)
+
+    # Advanced Scheduler Configuration
+    scheduler_strategy: str = Field(default="priority")
+    scheduler_aging_factor: float = Field(default=0.1)
+
 
 @lru_cache()
 def get_settings() -> Settings:
